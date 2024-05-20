@@ -3,15 +3,10 @@ const express = require('express');
 const cors = require('cors');
 const uri = "mongodb+srv://astrochinmay:astrochinmay@eduhub.2sgtwed.mongodb.net/?retryWrites=true&w=majority&appName=EduHub";
 
-
-
 const app = express();
 app.use(cors());
 app.use(express.json());
 
-var recivedData = null;
-var dataBase = null;
-var data = null;
 
 // Create a MongoClient with a MongoClientOptions object to set the Stable API version
 const client = new MongoClient(uri, {
@@ -22,6 +17,7 @@ const client = new MongoClient(uri, {
   }
 });
 
+// =====================================================================Configrations=======================================================
 var invoiceCollection = null;
 
 
@@ -53,23 +49,21 @@ app.listen(8000, () => {
 });
 
 
-
-async function PostData(recivedData) {
-  if (recivedData) {
-    await client.connect();
-    await invoiceCollection.insertMany(recivedData);
-    console.log("Data Inserted Into MangoDB DataBase");
-    // invoiceCollection = client.db("EduHub").collection("invoice").find({}).toArray();;
-  }
-}
-
-
+// ========================================================Get Unique Invoice Id ===========================================================
 
 app.get('/get', (req, res) => {
   res.send(invoiceData[invoiceData.length - 1]._id);
 });
 
 
+// =========================================================== Post New Invoice Data ========================================================
+async function PostData(recivedData) {
+  if (recivedData) {
+    await client.connect();
+    await invoiceCollection.insertMany(recivedData);
+    console.log("Data Inserted Into MangoDB DataBase");
+  }
+}
 
 app.post('/post', (req, res) => {
   const recivedData = req.body;
@@ -82,6 +76,9 @@ app.post('/post', (req, res) => {
   }
 });
 
+
+
+// ===================================================================Get Letest Invoices===================================================
 
 async function getLetestData(){
   await client.connect();
@@ -102,3 +99,42 @@ app.get('/tableData', (req, res) => {
   }
 })
 
+
+// ==================================================================Adding new Company======================================================
+
+async function addCompany(data){
+  await client.connect();
+  const companyCollection = client.db("EduHub").collection("Companies");
+  const res = await companyCollection.insertOne(data);
+  console.log(res)
+}
+
+app.post('/addcompany',(req,res)=>{
+  const data = req.body;
+  console.log(data);
+  res.send('Data Got To Backend');
+  addCompany(data);
+})
+
+// =========================================================================================================================================
+
+// ======================================================= Get Company List =================================================================
+
+async function getCompanyList (){
+  await client.connect();
+  const companyList = client.db('EduHub').collection('Companies')
+  const data = await companyList.find({}).toArray()
+  console.log(data);
+  return data;
+}
+
+app.get('/companyList' ,async (req , res)=>{
+    console.log('Request for list of companies recived')
+    try{
+      const data =  await getCompanyList();
+      console.log(data);
+      res.send(data)
+    }catch (e){
+      console.log('Error Occured',e);
+    }
+})
