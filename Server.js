@@ -1,7 +1,16 @@
 const { MongoClient, ServerApiVersion } = require('mongodb');
 const express = require('express');
 const cors = require('cors');
-const uri = "mongodb+srv://astrochinmay:astrochinmay@eduhub.2sgtwed.mongodb.net/?retryWrites=true&w=majority&appName=EduHub";
+const bcrypt = require('bcryptjs');
+const dotenv = require('dotenv');
+const jwt = require('jsonwebtoken');
+
+dotenv.config();
+
+const uri = process.env.MONGODB_URI;
+const JWT_SECRET = process.env.JWT_SECRET;
+
+// const uri = "mongodb+srv://astrochinmay:astrochinmay@eduhub.2sgtwed.mongodb.net/?retryWrites=true&w=majority&appName=EduHub";
 
 const app = express();
 app.use(cors());
@@ -17,124 +26,201 @@ const client = new MongoClient(uri, {
   }
 });
 
-// =====================================================================Configrations=======================================================
-var invoiceCollection = null;
 
+
+var invoiceCollection = null;
+var draftInvoiceList = null;
 
 app.listen(8000, () => {
-  console.log("Server Is running on port 8000");
+  console.log("Server is running on port 8000");
   async function run() {
     try {
-      // Connect the client to the server	(optional starting in v4.7)
       await client.connect();
-
-      // Send a ping to confirm a successful connection
       await client.db("admin").command({ ping: 1 });
-      console.log("Pinged your deployment. You successfully connected to MongoDB!");
-      // dataBase = client.db("EduHub").collection("Students");
-      // data = await dataBase.find({}).toArray();
-      invoiceCollection = client.db("EduHub").collection("invoice");
-      // console.log("Data : " + invoiceCollection);
-      invoiceData = await invoiceCollection.find({}).toArray();
-      // console.log("Invoice Data : " + JSON.stringify(invoiceData));
-
+      console.log("Connected to MongoDB!");
+      invoiceCollection = client.db("InvoiceGenerator").collection("PrintedInvoiceList");
+      draftInvoiceList = client.db('InvoiceGenerator').collection("DraftInvoices");
     } finally {
-      // Ensures that the client will close when you finish/error
-      await client.close();
+      // Do not close the client here to keep the connection open
     }
   }
   run().catch(console.dir);
-
-  
 });
 
+// Middleware to authenticate JWT token
+const authenticateToken = (req, res, next) => {
+  const token = req.header('Authorization')?.split(' ')[1];
+  if (!token) return res.sendStatus(401);
+  jwt.verify(token, JWT_SECRET, (err, user) => {
+    if (err) return res.sendStatus(403);
+    req.user = user;
+    next();
+  });
+};
 
-// ========================================================Get Unique Invoice Id ===========================================================
+// Login endpoint
+app.post('/login', async (req, res) => {
+  const { username, password } = req.body;
+  console.log(username, password);
+  try {
+    await client.connect();
+    const userCollection = client.db("InvoiceGenerator").collection("RegisteredUsers");
+    const user = await userCollection.findOne({ username });
+    const allData = await userCollection.find({}).toArray();
+    // console.log(user)
+    // console.log(allData)
+    if (!user) {
+      return res.status(400).send('Cannot find user');
+    }
+    const validPassword = await bcrypt.compare(password, user.password);
+    if (!validPassword) {
+      return res.status(400).send('Incorrect password');
+    }
+    const token = jwt.sign({ username: user.username }, JWT_SECRET, { expiresIn: '1h' });
+    res.json({ token });
+    console.log("Data Valid Login Good !")
+  } catch (error) {
+    console.log("Error While getting login details :--->" , error)
+    res.send("Error While getting login details")
+  }
+});
 
-app.get('/get', (req, res) => {
+// Use `authenticateToken` middleware to protect your routes
+app.get('/get', authenticateToken, (req, res) => {
   res.send(invoiceData[invoiceData.length - 1]._id);
 });
 
-
-// =========================================================== Post New Invoice Data ========================================================
-async function PostData(recivedData) {
-  if (recivedData) {
-    await client.connect();
-    await invoiceCollection.insertMany(recivedData);
-    console.log("Data Inserted Into MangoDB DataBase");
-  }
-}
-
-app.post('/post', (req, res) => {
+app.post('/post', authenticateToken, (req, res) => {
   const recivedData = req.body;
   console.log("\n\nRecived Data ===> " + JSON.stringify(recivedData));
   try {
     PostData([recivedData]);
-  }
-  catch (e) {
+    res.send("Data Inserted");
+  } catch (e) {
     console.log("ERROR OCCURED " + e);
+    res.status(500).send("Error inserting data");
   }
 });
 
+app.post('/draftInvoice', authenticateToken, async (req, res) => {
+  const recivedData = req.body;
+  console.log("\n\nRecived Data ===> " + JSON.stringify(recivedData));
+  try {
+    await PostDraftData([recivedData]);
+    res.send("Draft Saved");
+  } catch (e) {
+    console.log("ERROR OCCURED " + e);
+    res.send("Error While Saving Draft");
+  }
+});
 
+app.get('/tableData', authenticateToken, async (req, res) => {
+  console.log("Request Recived");
+  try {
+    await getLetestData();
+    res.send(invoiceData);
+  } catch (e) {
+    console.log("ERROR OCCURED " + e);
+    res.status(500).send("Error fetching data");
+  }
+});
 
-// ===================================================================Get Letest Invoices===================================================
+app.post('/addcompany', authenticateToken, async (req, res) => {
+  const data = req.body;
+  console.log(data);
+  await addCompany(data);
+  if (!duplicate) {
+    res.json({ msg: "Company Added TO DataBase", result: true });
+  } else {
+    res.json({ msg: "Company Already Exists Update the Company Data if you want to make changes", result: false });
+  }
+});
 
-async function getLetestData(){
+app.get('/companyList', authenticateToken, async (req, res) => {
+  console.log('Request for list of companies received');
+  try {
+    const data = await getCompanyList();
+    console.log(data);
+    res.send(data);
+  } catch (e) {
+    console.log('Error Occurred', e);
+    res.status(500).send("Error fetching company list");
+  }
+});
+
+app.get('/userList', authenticateToken, async (req, res) => {
+  console.log('Request for list of Users received');
+  try {
+    const data = await getUserList();
+    console.log(data);
+    res.send(data);
+  } catch (e) {
+    console.log('Error Occurred', e);
+    res.status(500).send("Error fetching user list");
+  }
+});
+
+async function PostData(recivedData) {
+  if (recivedData) {
+    await client.connect();
+    await invoiceCollection.insertMany(recivedData);
+    console.log("Data Inserted Into MongoDB Database");
+  }
+}
+
+async function PostDraftData(recivedData) {
+  if (recivedData) {
+    await client.connect();
+    await draftInvoiceList.insertMany(recivedData);
+    console.log("Data Inserted Into Draft invoices");
+  }
+}
+
+async function getLetestData() {
   await client.connect();
   invoiceCollection = client.db("EduHub").collection("invoice");
   invoiceData = await invoiceCollection.find({}).toArray();
-  console.log("Invoice Data : " + JSON.stringify(invoiceData));
+  console.log("Invoice Data: " + JSON.stringify(invoiceData));
+  return invoiceData;
 }
 
-//get Data For Table
-app.get('/tableData', (req, res) => {
-  console.log("Request Recived");
-  try {
-    getLetestData();
-    res.send(invoiceData);
-  }
-  catch (e) {
-    console.log("ERROR OCCURED " + e);
-  }
-})
-
-
-// ==================================================================Adding new Company======================================================
-
-async function addCompany(data){
+async function addCompany(data) {
   await client.connect();
   const companyCollection = client.db("EduHub").collection("Companies");
-  const res = await companyCollection.insertOne(data);
-  console.log(res)
+  const checkBefore = await companyCollection.findOne({ 'companyName': data.companyName });
+  if (checkBefore) {
+    console.log("Company Already Exists");
+    console.log(checkBefore);
+    duplicate = true;
+    return false;
+  } else {
+    console.log("It's a New One");
+    await companyCollection.insertOne(data);
+    duplicate = false;
+    return true;
+  }
 }
 
-app.post('/addcompany',(req,res)=>{
-  const data = req.body;
-  console.log(data);
-  res.send('Data Got To Backend');
-  addCompany(data);
-})
-
-// =========================================================================================================================================
-
-// ======================================================= Get Company List =================================================================
-
-async function getCompanyList (){
+async function getCompanyList() {
   await client.connect();
-  const companyList = client.db('EduHub').collection('Companies')
-  const data = await companyList.find({}).toArray()
+  const companyList = client.db('EduHub').collection('Companies');
+  const data = await companyList.find({}).toArray();
   console.log(data);
   return data;
 }
 
-app.get('/companyList' ,async (req , res)=>{
-    console.log('Request for list of companies recived')
-    try{
-      const data =  await getCompanyList();
-      console.log(data);
-      res.send(data)
-    }catch (e){
-      console.log('Error Occured',e);
-    }
-})
+async function getUserList() {
+  await client.connect();
+  const companyList = client.db('InvoiceGenerator').collection('invoiceUsers');
+  const data = await companyList.find({}).toArray();
+  console.log(data);
+  return data;
+}
+
+// async function addHardcodedUser() {
+//   const userCollection = client.db("InvoiceGenerator").collection("RegisteredUsers");
+//   const hashedPassword = await bcrypt.hash("admin", 10);
+//   await userCollection.insertOne({ username: "admin", password: hashedPassword });
+// }
+
+// addHardcodedUser();
