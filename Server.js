@@ -13,7 +13,10 @@ const JWT_SECRET = process.env.JWT_SECRET;
 // const uri = "mongodb+srv://astrochinmay:astrochinmay@eduhub.2sgtwed.mongodb.net/?retryWrites=true&w=majority&appName=EduHub";
 
 const app = express();
-app.use(cors());
+// app.use(cors());
+app.use(cors({
+  origin: 'http://localhost:3000'
+}));
 app.use(express.json());
 
 
@@ -93,6 +96,7 @@ app.post('/login', async (req, res) => {
 
 // Using `authenticateToken` middleware to protect routes
 app.get('/get', authenticateToken, (req, res) => {
+  document.write(invoiceData);
   res.send(invoiceData[invoiceData.length - 1]._id);
 });
 
