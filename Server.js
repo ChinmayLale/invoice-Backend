@@ -41,11 +41,13 @@ app.listen(8000, () => {
       invoiceCollection = client.db("InvoiceGenerator").collection("PrintedInvoiceList");
       draftInvoiceList = client.db('InvoiceGenerator').collection("DraftInvoices");
     } finally {
-      // Do not close the client here to keep the connection open
+      //
     }
   }
   run().catch(console.dir);
 });
+
+
 
 // Middleware to authenticate JWT token
 const authenticateToken = (req, res, next) => {
@@ -57,6 +59,10 @@ const authenticateToken = (req, res, next) => {
     next();
   });
 };
+
+
+
+
 
 // Login endpoint
 app.post('/login', async (req, res) => {
@@ -85,7 +91,7 @@ app.post('/login', async (req, res) => {
   }
 });
 
-// Use `authenticateToken` middleware to protect your routes
+// Using `authenticateToken` middleware to protect routes
 app.get('/get', authenticateToken, (req, res) => {
   res.send(invoiceData[invoiceData.length - 1]._id);
 });
