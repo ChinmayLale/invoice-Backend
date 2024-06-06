@@ -15,7 +15,7 @@ const JWT_SECRET = process.env.JWT_SECRET;
 const app = express();
 // app.use(cors());
 app.use(cors({
-  origin: 'http://localhost:3000'
+  origin: '*'
 }));
 app.use(express.json());
 
@@ -36,6 +36,7 @@ var draftInvoiceList = null;
 
 app.listen(8000, () => {
   console.log("Server is running on port 8000");
+  
   async function run() {
     try {
       await client.connect();
