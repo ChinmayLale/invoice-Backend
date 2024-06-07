@@ -96,6 +96,11 @@ app.post('/login', async (req, res) => {
 });
 
 // Using `authenticateToken` middleware to protect routes
+
+app.get('/home',(req,res)=>{
+  res.send("<h1>Hello From Server</h1>");
+})
+
 app.get('/get', authenticateToken, (req, res) => {
   document.write(invoiceData);
   res.send(invoiceData[invoiceData.length - 1]._id);
