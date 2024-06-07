@@ -13,14 +13,14 @@ const JWT_SECRET = process.env.JWT_SECRET;
 
 
 const app = express();
-// app.use(cors());
+app.use(cors());
 
 app.use(express.json());
-app.use(cors({
-  origin: 'http://localhost:3000', // This allows all origins. You can specify a specific origin instead of '*'.
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization','Access-Control-Allow-Origin']
-}));
+// app.use(cors({
+//   origin: 'http://localhost:3000', // This allows all origins. You can specify a specific origin instead of '*'.
+//   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+//   allowedHeaders: ['Content-Type', 'Authorization','Access-Control-Allow-Origin']
+// }));
 
 // Create a MongoClient with a MongoClientOptions object to set the Stable API version
 const client = new MongoClient(uri, {
