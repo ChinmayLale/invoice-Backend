@@ -13,14 +13,14 @@ const JWT_SECRET = process.env.JWT_SECRET;
 
 
 const app = express();
-app.use(cors());
-
+// app.use(cors());
+app.use(cors({
+  origin: ['https://main--invoiceapp-font.netlify.app', 'http://localhost:3000'],
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'Access-Control-Allow-Origin']
+}));
 app.use(express.json());
-// app.use(cors({
-//   origin: 'http://localhost:3000', // This allows all origins. You can specify a specific origin instead of '*'.
-//   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-//   allowedHeaders: ['Content-Type', 'Authorization','Access-Control-Allow-Origin']
-// }));
+
 
 // Create a MongoClient with a MongoClientOptions object to set the Stable API version
 const client = new MongoClient(uri, {
@@ -67,6 +67,28 @@ const authenticateToken = (req, res, next) => {
 };
 
 
+app.post('/signup',async(req,res)=>{
+  const { username, password , email } = req.body;
+  console.log(username, password , email);
+  try {
+    await client.connect();
+    const userCollection = client.db("InvoiceGenerator").collection("RegisteredUsers");
+    const existingUser = await userCollection.findOne({ email });
+    if (existingUser) {
+      return res.status(404).send("User already exists!");
+    } else {
+      // Hash the password
+      const hashedPassword = await bcrypt.hash(password, 10); 
+      // Save the hashed password to the database
+      await userCollection.insertOne({ username, email, password: hashedPassword });
+      res.status(200).send("Signup Successful!");
+    }
+  } catch (error) {
+    console.log("Error While Creating New User: ", error);
+    res.status(500).send("Error While Creating New User");
+  }
+});
+
 
 
 
@@ -109,7 +131,7 @@ app.get('/get', authenticateToken, (req, res) => {
 
 app.post('/post', authenticateToken, (req, res) => {
   const recivedData = req.body;
-  console.log("\n\nRecived Data ===> " + JSON.stringify(recivedData));
+  // console.log("\n\nRecived Data ===> " + JSON.stringify(recivedData));
   try {
     PostData([recivedData]);
     res.send("Data Inserted");
@@ -153,6 +175,20 @@ app.post('/addcompany', authenticateToken, async (req, res) => {
   }
 });
 
+app.post('/addCustomUser', authenticateToken, async (req, res) => {
+  const data = req.body;
+  console.log("Request For adding Client Recived")
+  console.log(data);
+  const ans = await addCustomUser(data);
+  console.log(ans)
+  if (ans) {
+    res.json({ msg: "Client Added TO DataBase", result: true });
+  } else {
+    res.json({ msg: "Client Already Exists Update the client Data if you want to make changes", result: false });
+  }
+});
+
+
 app.get('/companyList', authenticateToken, async (req, res) => {
   console.log('Request for list of companies received');
   try {
@@ -178,12 +214,33 @@ app.get('/userList', authenticateToken, async (req, res) => {
 });
 
 async function PostData(recivedData) {
+  // if (recivedData) {
+  //   await client.connect();
+  //   await invoiceCollection.insertMany(recivedData);
+  //   console.log("Data Inserted Into MongoDB Database");
+  // }
+
   if (recivedData) {
-    await client.connect();
-    await invoiceCollection.insertMany(recivedData);
-    console.log("Data Inserted Into MongoDB Database");
+    // Extract only the required fields
+    const recivedDataa = recivedData[0]
+    delete recivedData[0]['0']
+    JSON.stringify(recivedData);
+    console.log(recivedData)
+    const cleanedData = recivedData[0]
+
+    try {
+      await client.connect();
+      console.log(cleanedData);
+      await invoiceCollection.insertOne(cleanedData);
+      console.log("Data Inserted Into MongoDB Database");
+    } catch (error) {
+      console.error("Error inserting data into MongoDB:", error);
+    } finally {
+      await client.close();
+    }
   }
 }
+
 
 async function PostDraftData(recivedData) {
   if (recivedData) {
@@ -211,6 +268,26 @@ async function addCompany(data) {
     duplicate = true;
     return false;
   } else {
+    duplicate = false;
+    console.log("It's a New One");
+    await companyCollection.insertOne(data);
+    duplicate = false;
+    return true;
+  }
+}
+
+async function addCustomUser(data) {
+  await client.connect();
+  console.log(data.username)
+  const companyCollection = client.db("InvoiceGenerator").collection("clients");
+  const checkBefore = await companyCollection.findOne({ 'username': data.username });
+  console.log("User Exists ? ",checkBefore);
+  if (checkBefore) {
+    console.log("User Already Exists");
+    console.log(checkBefore);
+    duplicate = true;
+    return false;
+  } else {
     console.log("It's a New One");
     await companyCollection.insertOne(data);
     duplicate = false;
@@ -228,16 +305,9 @@ async function getCompanyList() {
 
 async function getUserList() {
   await client.connect();
-  const companyList = client.db('InvoiceGenerator').collection('invoiceUsers');
+  const companyList = client.db('InvoiceGenerator').collection('clients');
   const data = await companyList.find({}).toArray();
   console.log(data);
   return data;
 }
 
-// async function addHardcodedUser() {
-//   const userCollection = client.db("InvoiceGenerator").collection("RegisteredUsers");
-//   const hashedPassword = await bcrypt.hash("admin", 10);
-//   await userCollection.insertOne({ username: "admin", password: hashedPassword });
-// }
-
-// addHardcodedUser();
